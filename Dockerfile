@@ -8,7 +8,7 @@ WORKDIR /app
 # Copy project files
 COPY . .
 
-# IMPORTANT: Give mvnw execute permission
+# Give mvnw execute permission (required on Render)
 RUN chmod +x mvnw
 
 # Build Spring Boot JAR
@@ -22,12 +22,11 @@ FROM eclipse-temurin:21-jdk
 
 WORKDIR /app
 
-# Install Python, pip, virtualenv, ffmpeg
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    ffmpeg && \
+# Install Python + FFmpeg + Node.js (for yt-dlp YouTube JS engine)
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip python3-venv ffmpeg curl && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean
 
 # Create Python virtual environment
@@ -40,17 +39,17 @@ RUN /app/venv/bin/pip install --upgrade pip && \
 # Copy Spring Boot JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Copy download.py script
+# Copy yt-dlp Python script
 COPY download.py /app/download.py
 
-# Make download.py executable (optional but safe)
+# Make Python script executable
 RUN chmod +x /app/download.py
 
-# Add venv to PATH so Java app can call python normally
+# Ensure Java calls the venv Python
 ENV PATH="/app/venv/bin:$PATH"
 
 # Expose Spring Boot port
 EXPOSE 8080
 
-# Start application
+# Start the application
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

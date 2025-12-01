@@ -44,17 +44,14 @@ mp3_path = os.path.join(output_folder, title + ".mp3")
 ydl_opts = {
     "format": "bestaudio[ext=m4a]/bestaudio/best",
     "outtmpl": os.path.join(output_folder, title),
-
-    # ✔ REMOVE WINDOWS PATH
-    # "ffmpeg_location": "C:\\ffmpeg\\bin",
-
+    "ffmpeg_location": "/usr/bin/ffmpeg",
     "noplaylist": True,
     "nocheckcertificate": True,
     "forceipv4": True,
 
     "extractor_args": {
         "youtube": {
-            "player_client": ["android"]
+            "player_client": ["android", "default"]
         }
     },
 
@@ -64,6 +61,7 @@ ydl_opts = {
         "preferredquality": "192",
     }]
 }
+
 
 try:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
