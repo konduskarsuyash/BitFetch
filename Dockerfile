@@ -1,6 +1,22 @@
-###############################
+###################################
+# 1. BUILD STAGE
+###################################
+FROM eclipse-temurin:21-jdk AS build
+
+WORKDIR /app
+
+COPY . .
+
+# Give permissions to mvnw (very important on Linux)
+RUN chmod +x mvnw
+
+# Build the Spring Boot project
+RUN ./mvnw -q -DskipTests clean package
+
+
+###################################
 # 2. RUNTIME STAGE
-###############################
+###################################
 FROM eclipse-temurin:21-jdk
 
 WORKDIR /app
@@ -8,7 +24,7 @@ WORKDIR /app
 # Install curl first
 RUN apt-get update && apt-get install -y curl
 
-# Install Node.js 18 (needed by yt-dlp for JS runtime)
+# Install Node.js (yt-dlp needs JS runtime)
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs
 
@@ -19,14 +35,15 @@ RUN apt-get install -y python3 python3-pip python3-venv ffmpeg && \
 # Create Python venv
 RUN python3 -m venv /app/venv
 
-# Install python packages inside venv
+# Install python packages inside virtual env
 RUN /app/venv/bin/pip install --upgrade pip && \
     /app/venv/bin/pip install yt-dlp mutagen requests
 
-# Copy JAR + download script
+# Copy the built JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
-COPY download.py /app/download.py
 
+# Copy download.py
+COPY download.py /app/download.py
 RUN chmod +x /app/download.py
 
 ENV PATH="/app/venv/bin:$PATH"

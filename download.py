@@ -54,7 +54,7 @@ ydl_opts = {
             "player_client": ["default"],
             "skip_native_hls": True
         }
-    }
+    },
 
 
     "postprocessors": [{
