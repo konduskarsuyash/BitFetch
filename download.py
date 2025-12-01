@@ -51,9 +51,11 @@ ydl_opts = {
 
     "extractor_args": {
         "youtube": {
-            "player_client": ["android", "default"]
+            "player_client": ["default"],
+            "skip_native_hls": True
         }
-    },
+    }
+
 
     "postprocessors": [{
         "key": "FFmpegExtractAudio",
