@@ -119,4 +119,13 @@ public class WebhookController {
 
         return ResponseEntity.ok("OK");
     }
+
+    @GetMapping("/webhook/{secret}")
+    public ResponseEntity<String> webhookHealth(@PathVariable String secret) {
+        if (!secret.equals(webhookSecret)) {
+            return ResponseEntity.status(403).body("Forbidden");
+        }
+        return ResponseEntity.ok("OK");
+    }
+
 }
