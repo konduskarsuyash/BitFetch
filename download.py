@@ -7,15 +7,9 @@ from mutagen.mp3 import MP3
 import json
 import re
 
-# =============================
-# Sanitize Windows filename
-# =============================
 def sanitize(name):
     return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
-# =============================
-# Args check
-# =============================
 if len(sys.argv) < 3:
     print(json.dumps({"status": "error", "message": "Usage: python download.py <url> <output_folder>"}))
     sys.exit(1)
@@ -23,9 +17,7 @@ if len(sys.argv) < 3:
 url = sys.argv[1]
 output_folder = sys.argv[2]
 
-# =============================
-# 1. Extract metadata first
-# =============================
+# ============ 1. Extract Metadata ==============
 info_opts = {
     "quiet": True,
     "skip_download": True,
@@ -39,7 +31,7 @@ except:
     sys.exit(1)
 
 if not info:
-    print(json.dumps({"status": "error", "message": "Video metadata missing"}))
+    print(json.dumps({"status": "error", "message": "Missing metadata"}))
     sys.exit(1)
 
 raw_title = info.get("title", "song")
@@ -48,13 +40,14 @@ thumbnail_url = info.get("thumbnail")
 
 mp3_path = os.path.join(output_folder, title + ".mp3")
 
-# =============================
-# 2. Download MP3
-# =============================
+# ============ 2. Download MP3 ==============
 ydl_opts = {
     "format": "bestaudio[ext=m4a]/bestaudio/best",
     "outtmpl": os.path.join(output_folder, title),
-    "ffmpeg_location": "C:\\ffmpeg\\bin",
+
+    # ✔ REMOVE WINDOWS PATH
+    # "ffmpeg_location": "C:\\ffmpeg\\bin",
+
     "noplaylist": True,
     "nocheckcertificate": True,
     "forceipv4": True,
@@ -79,14 +72,11 @@ except Exception as e:
     print(json.dumps({"status": "error", "message": str(e)}))
     sys.exit(1)
 
-# Verify the MP3 exists
 if not os.path.exists(mp3_path) or os.path.getsize(mp3_path) < 50000:
-    print(json.dumps({"status": "error", "message": "MP3 file invalid or empty"}))
+    print(json.dumps({"status": "error", "message": "MP3 file empty or invalid"}))
     sys.exit(1)
 
-# =============================
-# 3. Embed Thumbnail
-# =============================
+# ============ 3. Embed Thumbnail ==============
 try:
     if thumbnail_url:
         img_data = requests.get(thumbnail_url, timeout=10).content
@@ -97,7 +87,6 @@ try:
         except:
             pass
 
-        # Set cover image
         audio.tags["APIC"] = APIC(
             encoding=3,
             mime="image/jpeg",
@@ -106,23 +95,19 @@ try:
             data=img_data,
         )
 
-        # Add title tag
         audio.tags["TIT2"] = TIT2(encoding=3, text=raw_title)
-
         audio.save()
 
 except Exception as e:
     print(json.dumps({
         "status": "warning",
-        "message": f"Thumbnail failed: {e}",
+        "message": str(e),
         "file_path": mp3_path,
         "title": raw_title
     }))
     sys.exit(0)
 
-# =============================
-# 4. SUCCESS RESPONSE
-# =============================
+# ============ 4. SUCCESS JSON ==============
 print(json.dumps({
     "status": "success",
     "file_path": mp3_path,
