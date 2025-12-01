@@ -1,23 +1,15 @@
 ###################################
 # 1. BUILD STAGE
 ###################################
-FROM eclipse-temurin:21-jdk AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 
 WORKDIR /app
 
-# Copy maven wrapper and pom.xml first (for layer caching)
-COPY mvnw .
-COPY .mvn .mvn
-COPY pom.xml .
+# Copy everything
+COPY . .
 
-# Copy source code
-COPY src src
-
-# Give permissions to mvnw (very important on Linux)
-RUN chmod +x mvnw
-
-# Build the Spring Boot project
-RUN ./mvnw clean package -DskipTests
+# Build the project
+RUN mvn clean package -DskipTests
 
 
 ###################################
@@ -37,7 +29,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (if needed)
+# Install Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean
@@ -45,7 +37,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
 # Create Python venv
 RUN python3 -m venv /app/venv
 
-# Install python packages - ALWAYS get latest yt-dlp
+# Install python packages
 RUN /app/venv/bin/pip install --upgrade pip && \
     /app/venv/bin/pip install --upgrade yt-dlp mutagen requests
 
@@ -56,7 +48,6 @@ COPY --from=build /app/target/*.jar app.jar
 COPY download.py /app/download.py
 RUN chmod +x /app/download.py
 
-# Set PATH to include venv
 ENV PATH="/app/venv/bin:$PATH"
 
 EXPOSE 8080

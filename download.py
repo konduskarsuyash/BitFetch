@@ -18,16 +18,19 @@ if len(sys.argv) < 3:
 url = sys.argv[1]
 output_folder = sys.argv[2]
 
+# Check if cookies file exists
+COOKIES_FILE = "/app/cookies.txt"
+use_cookies = os.path.exists(COOKIES_FILE)
+
 # Client fallback order
 PLAYER_CLIENTS = [
     ["android"],
     ["ios"],
     ["android", "web"],
-    ["tv_embedded"]
 ]
 
-def get_ydl_opts(output_folder, title, player_client):
-    return {
+def get_ydl_opts(output_folder, title, player_client, use_cookies=False):
+    opts = {
         "format": "bestaudio[ext=m4a]/bestaudio/best",
         "outtmpl": os.path.join(output_folder, title),
         "ffmpeg_location": "/usr/bin/ffmpeg",
@@ -56,6 +59,12 @@ def get_ydl_opts(output_folder, title, player_client):
         }]
     }
 
+    # Add cookies if available
+    if use_cookies:
+        opts["cookiefile"] = COOKIES_FILE
+
+    return opts
+
 # ============ 1. Extract Metadata with Retry ==============
 info = None
 for attempt, client in enumerate(PLAYER_CLIENTS, 1):
@@ -71,15 +80,22 @@ for attempt, client in enumerate(PLAYER_CLIENTS, 1):
             }
         }
 
+        # Add cookies if available
+        if use_cookies:
+            info_opts["cookiefile"] = COOKIES_FILE
+
         with yt_dlp.YoutubeDL(info_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             break
     except Exception as e:
         if attempt < len(PLAYER_CLIENTS):
-            time.sleep(1)  # Brief pause before retry
+            time.sleep(1)
             continue
         else:
-            print(json.dumps({"status": "error", "message": f"Failed to fetch video info: {str(e)}"}))
+            error_msg = f"Failed to fetch video info: {str(e)}"
+            if not use_cookies:
+                error_msg += " | TIP: Add cookies.txt for authentication"
+            print(json.dumps({"status": "error", "message": error_msg}))
             sys.exit(1)
 
 if not info:
@@ -97,7 +113,7 @@ download_success = False
 
 for attempt, client in enumerate(PLAYER_CLIENTS, 1):
     try:
-        ydl_opts = get_ydl_opts(output_folder, title, client)
+        ydl_opts = get_ydl_opts(output_folder, title, client, use_cookies)
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -109,13 +125,16 @@ for attempt, client in enumerate(PLAYER_CLIENTS, 1):
 
     except Exception as e:
         if attempt < len(PLAYER_CLIENTS):
-            time.sleep(2)  # Longer pause before retry
+            time.sleep(2)
             # Clean up partial file if exists
             if os.path.exists(mp3_path):
                 os.remove(mp3_path)
             continue
         else:
-            print(json.dumps({"status": "error", "message": f"Download failed: {str(e)}"}))
+            error_msg = f"Download failed: {str(e)}"
+            if not use_cookies:
+                error_msg += " | TIP: Add cookies.txt for authentication"
+            print(json.dumps({"status": "error", "message": error_msg}))
             sys.exit(1)
 
 if not download_success:
@@ -146,13 +165,7 @@ try:
 
 except Exception as e:
     # Thumbnail failure shouldn't stop the process
-    print(json.dumps({
-        "status": "warning",
-        "message": f"Thumbnail embed failed: {str(e)}",
-        "file_path": mp3_path,
-        "title": raw_title
-    }))
-    sys.exit(0)
+    pass
 
 # ============ 4. SUCCESS JSON ==============
 print(json.dumps({
