@@ -1,4 +1,26 @@
 ###################################
+# 1. BUILD STAGE
+###################################
+FROM eclipse-temurin:21-jdk AS build
+
+WORKDIR /app
+
+# Copy maven wrapper and pom.xml first (for layer caching)
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+
+# Copy source code
+COPY src src
+
+# Give permissions to mvnw (very important on Linux)
+RUN chmod +x mvnw
+
+# Build the Spring Boot project
+RUN ./mvnw clean package -DskipTests
+
+
+###################################
 # 2. RUNTIME STAGE
 ###################################
 FROM eclipse-temurin:21-jdk
@@ -15,7 +37,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (if needed for other features)
+# Install Node.js (if needed)
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean
@@ -34,6 +56,7 @@ COPY --from=build /app/target/*.jar app.jar
 COPY download.py /app/download.py
 RUN chmod +x /app/download.py
 
+# Set PATH to include venv
 ENV PATH="/app/venv/bin:$PATH"
 
 EXPOSE 8080
