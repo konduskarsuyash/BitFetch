@@ -6,6 +6,7 @@ from mutagen.id3 import ID3, APIC, TIT2
 from mutagen.mp3 import MP3
 import json
 import re
+import time
 
 def sanitize(name):
     return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
@@ -17,18 +18,69 @@ if len(sys.argv) < 3:
 url = sys.argv[1]
 output_folder = sys.argv[2]
 
-# ============ 1. Extract Metadata ==============
-info_opts = {
-    "quiet": True,
-    "skip_download": True,
-}
+# Client fallback order
+PLAYER_CLIENTS = [
+    ["android"],
+    ["ios"],
+    ["android", "web"],
+    ["tv_embedded"]
+]
 
-try:
-    with yt_dlp.YoutubeDL(info_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-except:
-    print(json.dumps({"status": "error", "message": "Failed to fetch video info"}))
-    sys.exit(1)
+def get_ydl_opts(output_folder, title, player_client):
+    return {
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "outtmpl": os.path.join(output_folder, title),
+        "ffmpeg_location": "/usr/bin/ffmpeg",
+        "noplaylist": True,
+        "nocheckcertificate": True,
+        "forceipv4": True,
+        "geo_bypass": True,
+        "quiet": False,
+        "no_warnings": False,
+
+        "extractor_args": {
+            "youtube": {
+                "player_client": player_client,
+                "skip_native_hls": True
+            }
+        },
+
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
+
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }]
+    }
+
+# ============ 1. Extract Metadata with Retry ==============
+info = None
+for attempt, client in enumerate(PLAYER_CLIENTS, 1):
+    try:
+        info_opts = {
+            "quiet": True,
+            "skip_download": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": client,
+                    "skip_native_hls": True
+                }
+            }
+        }
+
+        with yt_dlp.YoutubeDL(info_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            break
+    except Exception as e:
+        if attempt < len(PLAYER_CLIENTS):
+            time.sleep(1)  # Brief pause before retry
+            continue
+        else:
+            print(json.dumps({"status": "error", "message": f"Failed to fetch video info: {str(e)}"}))
+            sys.exit(1)
 
 if not info:
     print(json.dumps({"status": "error", "message": "Missing metadata"}))
@@ -40,39 +92,33 @@ thumbnail_url = info.get("thumbnail")
 
 mp3_path = os.path.join(output_folder, title + ".mp3")
 
-# ============ 2. Download MP3 ==============
-ydl_opts = {
-    "format": "bestaudio[ext=m4a]/bestaudio/best",
-    "outtmpl": os.path.join(output_folder, title),
-    "ffmpeg_location": "/usr/bin/ffmpeg",
-    "noplaylist": True,
-    "nocheckcertificate": True,
-    "forceipv4": True,
+# ============ 2. Download MP3 with Retry ==============
+download_success = False
 
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["default"],
-            "skip_native_hls": True
-        }
-    },
+for attempt, client in enumerate(PLAYER_CLIENTS, 1):
+    try:
+        ydl_opts = get_ydl_opts(output_folder, title, client)
 
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
 
-    "postprocessors": [{
-        "key": "FFmpegExtractAudio",
-        "preferredcodec": "mp3",
-        "preferredquality": "192",
-    }]
-}
+        # Verify file exists and has content
+        if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 50000:
+            download_success = True
+            break
 
+    except Exception as e:
+        if attempt < len(PLAYER_CLIENTS):
+            time.sleep(2)  # Longer pause before retry
+            # Clean up partial file if exists
+            if os.path.exists(mp3_path):
+                os.remove(mp3_path)
+            continue
+        else:
+            print(json.dumps({"status": "error", "message": f"Download failed: {str(e)}"}))
+            sys.exit(1)
 
-try:
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-except Exception as e:
-    print(json.dumps({"status": "error", "message": str(e)}))
-    sys.exit(1)
-
-if not os.path.exists(mp3_path) or os.path.getsize(mp3_path) < 50000:
+if not download_success:
     print(json.dumps({"status": "error", "message": "MP3 file empty or invalid"}))
     sys.exit(1)
 
@@ -99,9 +145,10 @@ try:
         audio.save()
 
 except Exception as e:
+    # Thumbnail failure shouldn't stop the process
     print(json.dumps({
         "status": "warning",
-        "message": str(e),
+        "message": f"Thumbnail embed failed: {str(e)}",
         "file_path": mp3_path,
         "title": raw_title
     }))

@@ -1,43 +1,31 @@
 ###################################
-# 1. BUILD STAGE
-###################################
-FROM eclipse-temurin:21-jdk AS build
-
-WORKDIR /app
-
-COPY . .
-
-# Give permissions to mvnw (very important on Linux)
-RUN chmod +x mvnw
-
-# Build the Spring Boot project
-RUN ./mvnw -q -DskipTests clean package
-
-
-###################################
 # 2. RUNTIME STAGE
 ###################################
 FROM eclipse-temurin:21-jdk
 
 WORKDIR /app
 
-# Install curl first
-RUN apt-get update && apt-get install -y curl
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    ffmpeg \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (yt-dlp needs JS runtime)
+# Install Node.js (if needed for other features)
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs
-
-# Install Python, pip, venv, ffmpeg
-RUN apt-get install -y python3 python3-pip python3-venv ffmpeg && \
+    apt-get install -y nodejs && \
     apt-get clean
 
 # Create Python venv
 RUN python3 -m venv /app/venv
 
-# Install python packages inside virtual env
+# Install python packages - ALWAYS get latest yt-dlp
 RUN /app/venv/bin/pip install --upgrade pip && \
-    /app/venv/bin/pip install yt-dlp mutagen requests
+    /app/venv/bin/pip install --upgrade yt-dlp mutagen requests
 
 # Copy the built JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
