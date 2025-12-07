@@ -7,10 +7,12 @@ from mutagen.mp3 import MP3
 import json
 import re
 import time
-
 import base64
 
-# Setup cookies from environment variable
+def sanitize(name):
+    return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+
+# ===== SETUP COOKIES FROM ENVIRONMENT =====
 COOKIES_FILE = None
 if os.getenv("YOUTUBE_COOKIES_BASE64"):
     try:
@@ -18,16 +20,29 @@ if os.getenv("YOUTUBE_COOKIES_BASE64"):
         COOKIES_FILE = "/tmp/cookies.txt"
         with open(COOKIES_FILE, "wb") as f:
             f.write(cookies_data)
-        print("Cookies loaded from environment variable", file=sys.stderr)
+
+        # Debug: Check if file was created and has content
+        if os.path.exists(COOKIES_FILE):
+            file_size = os.path.getsize(COOKIES_FILE)
+            print(f"✅ Cookies loaded from environment variable (size: {file_size} bytes)", file=sys.stderr)
+
+            # Debug: Show first line of cookies file
+            with open(COOKIES_FILE, "r") as f:
+                first_line = f.readline().strip()
+                print(f"Debug: First line: {first_line[:50]}...", file=sys.stderr)
+        else:
+            print("❌ Cookie file not created!", file=sys.stderr)
+            COOKIES_FILE = None
+
     except Exception as e:
-        print(f"Failed to load cookies: {e}", file=sys.stderr)
+        print(f"❌ Failed to load cookies: {e}", file=sys.stderr)
+        COOKIES_FILE = None
 elif os.path.exists("/app/cookies.txt"):
     COOKIES_FILE = "/app/cookies.txt"
-    print("Cookies loaded from /app/cookies.txt", file=sys.stderr)
+    file_size = os.path.getsize(COOKIES_FILE)
+    print(f"✅ Cookies loaded from /app/cookies.txt (size: {file_size} bytes)", file=sys.stderr)
 else:
-    print("WARNING: No cookies found - downloads may fail", file=sys.stderr)
-def sanitize(name):
-    return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+    print("⚠️ WARNING: No cookies found - downloads may fail", file=sys.stderr)
 
 if len(sys.argv) < 3:
     print(json.dumps({"status": "error", "message": "Usage: python download.py <url> <output_folder>"}))
@@ -36,18 +51,16 @@ if len(sys.argv) < 3:
 url = sys.argv[1]
 output_folder = sys.argv[2]
 
-# Check if cookies file exists
-COOKIES_FILE = "/app/cookies.txt"
-use_cookies = os.path.exists(COOKIES_FILE)
-
-# Client fallback order
+# Client fallback order - try more aggressive options
 PLAYER_CLIENTS = [
     ["android"],
+    ["android_creator"],
     ["ios"],
-    ["android", "web"],
+    ["mweb"],
+    ["tv_embedded"],
 ]
 
-def get_ydl_opts(output_folder, title, player_client, use_cookies=False):
+def get_ydl_opts(output_folder, title, player_client):
     opts = {
         "format": "bestaudio[ext=m4a]/bestaudio/best",
         "outtmpl": os.path.join(output_folder, title),
@@ -62,12 +75,12 @@ def get_ydl_opts(output_folder, title, player_client, use_cookies=False):
         "extractor_args": {
             "youtube": {
                 "player_client": player_client,
-                "skip_native_hls": True
+                "skip_native_hls": True,
             }
         },
 
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36"
         },
 
         "postprocessors": [{
@@ -78,15 +91,22 @@ def get_ydl_opts(output_folder, title, player_client, use_cookies=False):
     }
 
     # Add cookies if available
-    if use_cookies:
+    if COOKIES_FILE and os.path.exists(COOKIES_FILE):
         opts["cookiefile"] = COOKIES_FILE
+        print(f"Using cookies file: {COOKIES_FILE}", file=sys.stderr)
+    else:
+        print("No cookies file available!", file=sys.stderr)
 
     return opts
 
 # ============ 1. Extract Metadata with Retry ==============
 info = None
+last_error = None
+
 for attempt, client in enumerate(PLAYER_CLIENTS, 1):
     try:
+        print(f"Attempt {attempt}/{len(PLAYER_CLIENTS)} with client: {client}", file=sys.stderr)
+
         info_opts = {
             "quiet": True,
             "skip_download": True,
@@ -98,20 +118,23 @@ for attempt, client in enumerate(PLAYER_CLIENTS, 1):
             }
         }
 
-        # Add cookies if available
-        if use_cookies:
+        if COOKIES_FILE and os.path.exists(COOKIES_FILE):
             info_opts["cookiefile"] = COOKIES_FILE
 
         with yt_dlp.YoutubeDL(info_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+            print(f"✅ Success with client: {client}", file=sys.stderr)
             break
+
     except Exception as e:
+        last_error = str(e)
+        print(f"❌ Failed with client {client}: {str(e)[:100]}", file=sys.stderr)
         if attempt < len(PLAYER_CLIENTS):
-            time.sleep(1)
+            time.sleep(2)
             continue
         else:
-            error_msg = f"Failed to fetch video info: {str(e)}"
-            if not use_cookies:
+            error_msg = f"Failed to fetch video info: {last_error}"
+            if not COOKIES_FILE:
                 error_msg += " | TIP: Add cookies.txt for authentication"
             print(json.dumps({"status": "error", "message": error_msg}))
             sys.exit(1)
@@ -131,26 +154,28 @@ download_success = False
 
 for attempt, client in enumerate(PLAYER_CLIENTS, 1):
     try:
-        ydl_opts = get_ydl_opts(output_folder, title, client, use_cookies)
+        print(f"Download attempt {attempt}/{len(PLAYER_CLIENTS)} with client: {client}", file=sys.stderr)
+
+        ydl_opts = get_ydl_opts(output_folder, title, client)
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-        # Verify file exists and has content
         if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 50000:
             download_success = True
+            print(f"✅ Download success with client: {client}", file=sys.stderr)
             break
 
     except Exception as e:
+        print(f"❌ Download failed with client {client}: {str(e)[:100]}", file=sys.stderr)
         if attempt < len(PLAYER_CLIENTS):
-            time.sleep(2)
-            # Clean up partial file if exists
+            time.sleep(3)
             if os.path.exists(mp3_path):
                 os.remove(mp3_path)
             continue
         else:
             error_msg = f"Download failed: {str(e)}"
-            if not use_cookies:
+            if not COOKIES_FILE:
                 error_msg += " | TIP: Add cookies.txt for authentication"
             print(json.dumps({"status": "error", "message": error_msg}))
             sys.exit(1)
@@ -163,26 +188,15 @@ if not download_success:
 try:
     if thumbnail_url:
         img_data = requests.get(thumbnail_url, timeout=10).content
-
         audio = MP3(mp3_path, ID3=ID3)
         try:
             audio.add_tags()
         except:
             pass
-
-        audio.tags["APIC"] = APIC(
-            encoding=3,
-            mime="image/jpeg",
-            type=3,
-            desc="Cover",
-            data=img_data,
-        )
-
+        audio.tags["APIC"] = APIC(encoding=3, mime="image/jpeg", type=3, desc="Cover", data=img_data)
         audio.tags["TIT2"] = TIT2(encoding=3, text=raw_title)
         audio.save()
-
-except Exception as e:
-    # Thumbnail failure shouldn't stop the process
+except:
     pass
 
 # ============ 4. SUCCESS JSON ==============
