@@ -109,8 +109,16 @@ public class WebhookController {
 
             log.info("🎵 Song requested: {} (message age: {}s)", songName, messageAge);
 
+            // 🔒 PREVENT DUPLICATE PROCESSING
+            String messageKey = chatId + ":" + messageDate;
+
+            if (!processingMessages.add(messageKey)) {
+                log.warn("🔄 Duplicate message detected, ignoring: {}", songName);
+                return ResponseEntity.ok("OK");
+            }
+
             // 🚀 PROCESS ASYNCHRONOUSLY - Don't wait for download!
-            processDownloadAsync(chatId, songName);
+            processDownloadAsync(chatId, songName, messageKey);
 
             // ✅ IMMEDIATELY RETURN - Don't let Telegram timeout!
             return ResponseEntity.ok("OK");
@@ -119,8 +127,8 @@ public class WebhookController {
         return ResponseEntity.ok("OK");
     }
 
-    @Async
-    public void processDownloadAsync(Long chatId, String songName) {
+    @Async("taskExecutor")
+    public void processDownloadAsync(Long chatId, String songName, String messageKey) {
         try {
             telegramService.sendMessage(chatId, "🔍 Searching... 🎵");
 
@@ -151,6 +159,9 @@ public class WebhookController {
         } catch (Exception e) {
             log.error("❌ Error processing request for '{}': {}", songName, e.getMessage(), e);
             telegramService.sendMessage(chatId, "❌ Error: " + e.getMessage());
+        } finally {
+            // 🔓 Remove from processing set
+            processingMessages.remove(messageKey);
         }
     }
 
