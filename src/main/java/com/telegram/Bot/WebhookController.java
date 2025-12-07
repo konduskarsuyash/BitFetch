@@ -45,8 +45,8 @@ public class WebhookController {
         }
 
         // ============================
-// 🔥 CALLBACK QUERY HANDLER
-// ============================
+        // 🔥 CALLBACK QUERY HANDLER
+        // ============================
         if (update.getCallbackQuery() != null) {
 
             String data = update.getCallbackQuery().getData();
@@ -91,19 +91,24 @@ public class WebhookController {
 
             log.info("Song requested: {}", songName);
 
-            telegramService.sendMessage(chatId, "Searching... 🎵");
+            telegramService.sendMessage(chatId, "🔍 Searching... 🎵");
 
             try {
                 // 1) Search YouTube
                 String youtubeLink = youTubeService.searchOnYouTube(songName);
 
-                // 2) Send thumbnail
-                String thumbnailUrl = thumbnailService.getThumbnailUrl(youtubeLink);
-                if (thumbnailUrl != null) {
-                    telegramService.sendPhoto(chatId, thumbnailUrl);
+                // 2) Send thumbnail (with error handling)
+                try {
+                    String thumbnailUrl = thumbnailService.getThumbnailUrl(youtubeLink);
+                    if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
+                        telegramService.sendPhoto(chatId, thumbnailUrl);
+                    }
+                } catch (Exception e) {
+                    log.warn("Could not send thumbnail: {}", e.getMessage());
+                    // Continue without thumbnail
                 }
 
-                telegramService.sendMessage(chatId, "Downloading audio... ⏳");
+                telegramService.sendMessage(chatId, "⬇️ Downloading audio... ⏳");
 
                 // 3) Download MP3 via Python
                 File mp3File = downloadService.downloadMp3(youtubeLink);
