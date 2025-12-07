@@ -5,17 +5,19 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.bind.annotation.*;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.io.File;
 import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 public class WebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
-    private static final int MESSAGE_TIMEOUT_SECONDS = 60; // Ignore messages older than 60 seconds
+    private static final int MESSAGE_TIMEOUT_SECONDS = 60;
 
     @Value("${telegram.webhook.secret}")
     private String webhookSecret;
@@ -92,52 +94,60 @@ public class WebhookController {
             String songName = update.getMessage().getText();
             Integer messageDate = update.getMessage().getDate();
 
-            // ✅ FILTER OLD MESSAGES - This prevents processing queued "perfect" requests
+            // ✅ FILTER OLD MESSAGES
             long currentTime = Instant.now().getEpochSecond();
             long messageAge = currentTime - messageDate;
 
             if (messageAge > MESSAGE_TIMEOUT_SECONDS) {
                 log.warn("⏭️ Ignoring old message ({}s old): {}", messageAge, songName);
-                return ResponseEntity.ok("OK"); // Acknowledge but don't process
+                return ResponseEntity.ok("OK");
             }
 
             log.info("🎵 Song requested: {} (message age: {}s)", songName, messageAge);
 
-            telegramService.sendMessage(chatId, "🔍 Searching... 🎵");
+            // 🚀 PROCESS ASYNCHRONOUSLY - Don't wait for download!
+            processDownloadAsync(chatId, songName);
 
-            try {
-                // 1) Search YouTube
-                String youtubeLink = youTubeService.searchOnYouTube(songName);
-                log.info("✅ YouTube URL found: {}", youtubeLink);
-
-                // 2) Send thumbnail (with error handling)
-                try {
-                    String thumbnailUrl = thumbnailService.getThumbnailUrl(youtubeLink);
-                    if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
-                        telegramService.sendPhoto(chatId, thumbnailUrl);
-                    }
-                } catch (Exception e) {
-                    log.warn("Could not send thumbnail: {}", e.getMessage());
-                    // Continue without thumbnail
-                }
-
-                telegramService.sendMessage(chatId, "⬇️ Downloading audio... ⏳");
-
-                // 3) Download MP3 via Python
-                File mp3File = downloadService.downloadMp3(youtubeLink);
-
-                // 4) Send MP3 WITH BUTTON
-                telegramService.sendAudioWithButton(chatId, mp3File, songName);
-
-                log.info("✅ Successfully processed: {}", songName);
-
-            } catch (Exception e) {
-                log.error("❌ Error processing request for '{}': {}", songName, e.getMessage(), e);
-                telegramService.sendMessage(chatId, "❌ Error: " + e.getMessage());
-            }
+            // ✅ IMMEDIATELY RETURN - Don't let Telegram timeout!
+            return ResponseEntity.ok("OK");
         }
 
         return ResponseEntity.ok("OK");
+    }
+
+    @Async
+    public void processDownloadAsync(Long chatId, String songName) {
+        try {
+            telegramService.sendMessage(chatId, "🔍 Searching... 🎵");
+
+            // 1) Search YouTube
+            String youtubeLink = youTubeService.searchOnYouTube(songName);
+            log.info("✅ YouTube URL found: {}", youtubeLink);
+
+            // 2) Send thumbnail (with error handling)
+            try {
+                String thumbnailUrl = thumbnailService.getThumbnailUrl(youtubeLink);
+                if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
+                    telegramService.sendPhoto(chatId, thumbnailUrl);
+                }
+            } catch (Exception e) {
+                log.warn("Could not send thumbnail: {}", e.getMessage());
+            }
+
+            telegramService.sendMessage(chatId, "⬇️ Downloading audio... ⏳");
+
+            // 3) Download MP3 via Python
+            File mp3File = downloadService.downloadMp3(youtubeLink);
+
+            // 4) Send MP3 WITH BUTTON
+            telegramService.sendAudioWithButton(chatId, mp3File, songName);
+
+            log.info("✅ Successfully processed: {}", songName);
+
+        } catch (Exception e) {
+            log.error("❌ Error processing request for '{}': {}", songName, e.getMessage(), e);
+            telegramService.sendMessage(chatId, "❌ Error: " + e.getMessage());
+        }
     }
 
     @GetMapping("/webhook/{secret}")
