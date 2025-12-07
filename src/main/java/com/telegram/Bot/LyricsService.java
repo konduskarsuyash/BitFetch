@@ -14,7 +14,7 @@ import org.springframework.web.client.RestTemplate;
 @Service
 public class LyricsService {
 
-    @Value("${genius.api.token}")
+    @Value("${genius.api.token:}")
     private String geniusToken;
 
     private final RestTemplate rest = new RestTemplate();

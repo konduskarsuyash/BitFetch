@@ -48,6 +48,9 @@ COPY --from=build /app/target/*.jar app.jar
 COPY download.py /app/download.py
 RUN chmod +x /app/download.py
 
+# REMOVE THIS LINE - Don't bake cookies into image
+# COPY cookies.txt /app/cookies.txt
+
 ENV PATH="/app/venv/bin:$PATH"
 
 EXPOSE 8080

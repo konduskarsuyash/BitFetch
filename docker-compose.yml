@@ -1,0 +1,11 @@
+services:
+  telegram-bot:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    # Remove volume mount to test env var
+    # volumes:
+    #   - ./cookies.txt:/app/cookies.txt
+    restart: unless-stopped

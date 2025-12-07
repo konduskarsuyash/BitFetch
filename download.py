@@ -8,6 +8,24 @@ import json
 import re
 import time
 
+import base64
+
+# Setup cookies from environment variable
+COOKIES_FILE = None
+if os.getenv("YOUTUBE_COOKIES_BASE64"):
+    try:
+        cookies_data = base64.b64decode(os.getenv("YOUTUBE_COOKIES_BASE64"))
+        COOKIES_FILE = "/tmp/cookies.txt"
+        with open(COOKIES_FILE, "wb") as f:
+            f.write(cookies_data)
+        print("Cookies loaded from environment variable", file=sys.stderr)
+    except Exception as e:
+        print(f"Failed to load cookies: {e}", file=sys.stderr)
+elif os.path.exists("/app/cookies.txt"):
+    COOKIES_FILE = "/app/cookies.txt"
+    print("Cookies loaded from /app/cookies.txt", file=sys.stderr)
+else:
+    print("WARNING: No cookies found - downloads may fail", file=sys.stderr)
 def sanitize(name):
     return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
