@@ -200,8 +200,18 @@ except:
     pass
 
 # ============ 4. SUCCESS JSON ==============
+
 print(json.dumps({
     "status": "success",
     "file_path": mp3_path,
     "title": raw_title
 }))
+
+# To:
+result = json.dumps({
+    "status": "success",
+    "file_path": mp3_path,
+    "title": raw_title
+})
+print(result, flush=True)  # Force immediate flush
+sys.stdout.flush()
