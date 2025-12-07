@@ -11,13 +11,17 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.io.File;
 import java.time.Instant;
-import java.util.concurrent.CompletableFuture;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 public class WebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
     private static final int MESSAGE_TIMEOUT_SECONDS = 60;
+
+    // Prevent duplicate processing
+    private final Set<String> processingMessages = ConcurrentHashMap.newKeySet();
 
     @Value("${telegram.webhook.secret}")
     private String webhookSecret;
