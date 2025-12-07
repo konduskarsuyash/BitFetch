@@ -9,7 +9,7 @@ import java.util.concurrent.*;
 @Service
 public class DownloadService {
 
-    private static final int TIMEOUT_SECONDS = 180; // 3 minutes max
+    private static final int TIMEOUT_SECONDS = 120; // 2 minutes max
 
     public File downloadMp3(String url) {
         try {

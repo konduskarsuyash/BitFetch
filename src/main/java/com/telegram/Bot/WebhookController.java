@@ -9,11 +9,13 @@ import org.springframework.web.bind.annotation.*;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.io.File;
+import java.time.Instant;
 
 @RestController
 public class WebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
+    private static final int MESSAGE_TIMEOUT_SECONDS = 60; // Ignore messages older than 60 seconds
 
     @Value("${telegram.webhook.secret}")
     private String webhookSecret;
@@ -84,18 +86,29 @@ public class WebhookController {
         // ============================
         // 🔥 NORMAL MESSAGE HANDLER
         // ============================
-        if (update.getMessage() != null) {
+        if (update.getMessage() != null && update.getMessage().hasText()) {
 
             Long chatId = update.getMessage().getChatId();
             String songName = update.getMessage().getText();
+            Integer messageDate = update.getMessage().getDate();
 
-            log.info("Song requested: {}", songName);
+            // ✅ FILTER OLD MESSAGES - This prevents processing queued "perfect" requests
+            long currentTime = Instant.now().getEpochSecond();
+            long messageAge = currentTime - messageDate;
+
+            if (messageAge > MESSAGE_TIMEOUT_SECONDS) {
+                log.warn("⏭️ Ignoring old message ({}s old): {}", messageAge, songName);
+                return ResponseEntity.ok("OK"); // Acknowledge but don't process
+            }
+
+            log.info("🎵 Song requested: {} (message age: {}s)", songName, messageAge);
 
             telegramService.sendMessage(chatId, "🔍 Searching... 🎵");
 
             try {
                 // 1) Search YouTube
                 String youtubeLink = youTubeService.searchOnYouTube(songName);
+                log.info("✅ YouTube URL found: {}", youtubeLink);
 
                 // 2) Send thumbnail (with error handling)
                 try {
@@ -116,8 +129,10 @@ public class WebhookController {
                 // 4) Send MP3 WITH BUTTON
                 telegramService.sendAudioWithButton(chatId, mp3File, songName);
 
+                log.info("✅ Successfully processed: {}", songName);
+
             } catch (Exception e) {
-                log.error("Error processing request", e);
+                log.error("❌ Error processing request for '{}': {}", songName, e.getMessage(), e);
                 telegramService.sendMessage(chatId, "❌ Error: " + e.getMessage());
             }
         }
