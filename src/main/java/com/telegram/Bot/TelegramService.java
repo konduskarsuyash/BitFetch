@@ -1,5 +1,7 @@
 package com.telegram.Bot;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +12,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,7 +25,28 @@ public class TelegramService {
     @Value("${telegram.bot.token}")
     private String botToken;
 
+    @Value("${cloudinary.cloud-name}")
+    private String cloudinaryCloudName;
+
+    @Value("${cloudinary.api-key}")
+    private String cloudinaryApiKey;
+
+    @Value("${cloudinary.api-secret}")
+    private String cloudinaryApiSecret;
+
     private final RestTemplate restTemplate = new RestTemplate();
+    private Cloudinary cloudinary;
+
+    @PostConstruct
+    public void init() {
+        // Initialize Cloudinary
+        cloudinary = new Cloudinary(ObjectUtils.asMap(
+                "cloud_name", cloudinaryCloudName,
+                "api_key", cloudinaryApiKey,
+                "api_secret", cloudinaryApiSecret
+        ));
+        log.info("✅ Cloudinary initialized: {}", cloudinaryCloudName);
+    }
 
     // =====================================
     //  SEND NORMAL TEXT MESSAGE
@@ -59,33 +83,30 @@ public class TelegramService {
     }
 
     // =====================================
-    //  SEND AUDIO FILE WITH BUTTON (VIA FILE.IO)
+    //  SEND AUDIO FILE WITH BUTTON (VIA CLOUDINARY)
     // =====================================
     public void sendAudioWithButton(Long chatId, File audioFile, String songName) {
         try {
             long startTime = System.currentTimeMillis();
-            log.info("📤 Starting file upload process for: {} ({} bytes)",
+            log.info("📤 Starting file upload to Cloudinary for: {} ({} bytes)",
                     audioFile.getName(), audioFile.length());
 
-            // Step 1: Upload to file.io (fast CDN)
-            String fileUrl = uploadToFileIo(audioFile);
+            // Upload to Cloudinary
+            String audioUrl = uploadToCloudinary(audioFile);
             long uploadTime = System.currentTimeMillis() - startTime;
-            log.info("✅ Uploaded to file.io in {}ms: {}", uploadTime, fileUrl);
+            log.info("✅ Uploaded to Cloudinary in {}ms: {}", uploadTime, audioUrl);
 
-            // Step 2: Send audio URL to Telegram
-            sendAudioByUrl(chatId, fileUrl, songName);
+            // Send audio URL to Telegram
+            sendAudioByUrl(chatId, audioUrl, songName);
             long totalTime = System.currentTimeMillis() - startTime;
             log.info("✅ Total send time: {}ms", totalTime);
 
         } catch (Exception e) {
-            log.error("❌ Failed to send audio via file.io: {}", e.getMessage(), e);
-
-            // Fallback: Try direct upload to Telegram
+            log.error("❌ Cloudinary upload failed: {}", e.getMessage(), e);
             log.warn("⚠️ Falling back to direct Telegram upload...");
             sendAudioDirectly(chatId, audioFile, songName);
 
         } finally {
-            // Clean up temp file
             if (audioFile.exists()) {
                 audioFile.delete();
                 log.info("🗑️ Deleted temp file: {}", audioFile.getName());
@@ -94,48 +115,28 @@ public class TelegramService {
     }
 
     // =====================================
-    //  UPLOAD TO FILE.IO
+    //  UPLOAD TO CLOUDINARY
     // =====================================
-    private String uploadToFileIo(File file) {
-        String uploadUrl = "https://file.io";
-
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new FileSystemResource(file));
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-
-        HttpEntity<MultiValueMap<String, Object>> requestEntity =
-                new HttpEntity<>(body, headers);
-
+    private String uploadToCloudinary(File file) {
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                    uploadUrl,
-                    requestEntity,
-                    Map.class
-            );
+            Map uploadResult = cloudinary.uploader().upload(file, ObjectUtils.asMap(
+                    "resource_type", "video",  // Use "video" for audio files in Cloudinary
+                    "folder", "telegram-audio",
+                    "use_filename", true,
+                    "unique_filename", true
+            ));
 
-            Map<String, Object> responseBody = response.getBody();
+            String secureUrl = (String) uploadResult.get("secure_url");
 
-            if (responseBody == null) {
-                throw new RuntimeException("Empty response from file.io");
+            if (secureUrl == null || secureUrl.isEmpty()) {
+                throw new RuntimeException("No URL returned from Cloudinary");
             }
 
-            Boolean success = (Boolean) responseBody.get("success");
-            if (success == null || !success) {
-                String message = (String) responseBody.get("message");
-                throw new RuntimeException("file.io upload failed: " + message);
-            }
-
-            String link = (String) responseBody.get("link");
-            if (link == null || link.isEmpty()) {
-                throw new RuntimeException("No link returned from file.io");
-            }
-
-            return link;
+            log.info("📦 Cloudinary public_id: {}", uploadResult.get("public_id"));
+            return secureUrl;
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to upload to file.io: " + e.getMessage(), e);
+            throw new RuntimeException("Cloudinary upload failed: " + e.getMessage(), e);
         }
     }
 
@@ -145,7 +146,6 @@ public class TelegramService {
     private void sendAudioByUrl(Long chatId, String audioUrl, String songName) {
         String url = "https://api.telegram.org/bot" + botToken + "/sendAudio";
 
-        // Build inline keyboard with lyrics button
         String keyboardJson = String.format(
                 "{\"inline_keyboard\":[[{\"text\":\"📖 Show Lyrics\",\"callback_data\":\"LYRICS:%s\"}]]}",
                 songName.replace("\"", "'")
@@ -197,7 +197,7 @@ public class TelegramService {
             log.info("✅ Audio uploaded directly to Telegram");
         } catch (Exception e) {
             log.error("❌ Direct upload also failed: {}", e.getMessage(), e);
-            throw new RuntimeException("Both file.io and direct upload failed", e);
+            throw new RuntimeException("Both Cloudinary and direct upload failed", e);
         }
     }
 
