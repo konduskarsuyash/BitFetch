@@ -95,7 +95,7 @@ public class WebhookController {
         if (update.getMessage() != null && update.getMessage().hasText()) {
 
             Long chatId = update.getMessage().getChatId();
-            String songName = update.getMessage().getText();
+            String messageText = update.getMessage().getText();
             Integer messageDate = update.getMessage().getDate();
 
             // ✅ FILTER OLD MESSAGES
@@ -103,28 +103,106 @@ public class WebhookController {
             long messageAge = currentTime - messageDate;
 
             if (messageAge > MESSAGE_TIMEOUT_SECONDS) {
-                log.warn("⏭️ Ignoring old message ({}s old): {}", messageAge, songName);
+                log.warn("⏭️ Ignoring old message ({}s old): {}", messageAge, messageText);
                 return ResponseEntity.ok("OK");
             }
 
-            log.info("🎵 Song requested: {} (message age: {}s)", songName, messageAge);
+            // ============================
+            // 🔥 HANDLE BOT COMMANDS
+            // ============================
+            if (messageText.startsWith("/")) {
+                handleCommand(chatId, messageText);
+                return ResponseEntity.ok("OK");
+            }
+
+            log.info("🎵 Song requested: {} (message age: {}s)", messageText, messageAge);
 
             // 🔒 PREVENT DUPLICATE PROCESSING
             String messageKey = chatId + ":" + messageDate;
 
             if (!processingMessages.add(messageKey)) {
-                log.warn("🔄 Duplicate message detected, ignoring: {}", songName);
+                log.warn("🔄 Duplicate message detected, ignoring: {}", messageText);
                 return ResponseEntity.ok("OK");
             }
 
             // 🚀 PROCESS ASYNCHRONOUSLY - Don't wait for download!
-            processDownloadAsync(chatId, songName, messageKey);
+            processDownloadAsync(chatId, messageText, messageKey);
 
             // ✅ IMMEDIATELY RETURN - Don't let Telegram timeout!
             return ResponseEntity.ok("OK");
         }
 
         return ResponseEntity.ok("OK");
+    }
+
+    // ============================
+    // 🤖 COMMAND HANDLER
+    // ============================
+    private void handleCommand(Long chatId, String command) {
+        String cmd = command.toLowerCase().split(" ")[0]; // Get command without parameters
+
+        switch (cmd) {
+            case "/start":
+                String welcomeMessage = """
+                        👋 *Welcome to Music Download Bot!*
+                        
+                        🎵 Just send me any song name and I'll:
+                        • Find it on YouTube
+                        • Download it as MP3
+                        • Send it to you with lyrics option
+                        
+                        *Example:*
+                        Just type: `Shape of You`
+                        
+                        Ready to download some music? 🎶
+                        """;
+                telegramService.sendMessage(chatId, welcomeMessage);
+                log.info("✅ Sent welcome message to chatId: {}", chatId);
+                break;
+
+            case "/help":
+                String helpMessage = """
+                        ℹ️ *How to use this bot:*
+                        
+                        1️⃣ Send me a song name
+                        2️⃣ I'll search YouTube for it
+                        3️⃣ Download and send you the MP3
+                        4️⃣ Click "Show Lyrics" button for lyrics
+                        
+                        *Commands:*
+                        /start - Start the bot
+                        /help - Show this help message
+                        /about - About this bot
+                        
+                        Just send a song name to get started! 🎵
+                        """;
+                telegramService.sendMessage(chatId, helpMessage);
+                log.info("✅ Sent help message to chatId: {}", chatId);
+                break;
+
+            case "/about":
+                String aboutMessage = """
+                        ℹ️ *About Music Download Bot*
+                        
+                        This bot helps you download music from YouTube as MP3 files.
+                        
+                        *Features:*
+                        🎵 High-quality MP3 downloads
+                        📖 Lyrics support
+                        🖼️ Thumbnail preview
+                        ⚡ Fast delivery via Cloudinary CDN
+                        
+                        Made with ❤️
+                        """;
+                telegramService.sendMessage(chatId, aboutMessage);
+                log.info("✅ Sent about message to chatId: {}", chatId);
+                break;
+
+            default:
+                telegramService.sendMessage(chatId, "❓ Unknown command. Use /help to see available commands.");
+                log.info("⚠️ Unknown command: {} from chatId: {}", command, chatId);
+                break;
+        }
     }
 
     @Async("taskExecutor")
