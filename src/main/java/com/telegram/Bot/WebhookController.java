@@ -126,7 +126,75 @@ public class WebhookController {
 
         return ResponseEntity.ok("OK");
     }
+    // ============================
+    // 🤖 COMMAND HANDLER
+    // ============================
+    private void handleCommand(Long chatId, String command) {
+        String cmd = command.toLowerCase().split(" ")[0]; // Get command without parameters
 
+        switch (cmd) {
+            case "/start":
+                String welcomeMessage = """
+                        👋 *Welcome to Music Download Bot!*
+                        
+                        🎵 Just send me any song name and I'll:
+                        • Find it on YouTube
+                        • Download it as MP3
+                        • Send it to you with lyrics option
+                        
+                        *Example:*
+                        Just type: `Shape of You`
+                        
+                        Ready to download some music? 🎶
+                        """;
+                telegramService.sendMessage(chatId, welcomeMessage);
+                log.info("✅ Sent welcome message to chatId: {}", chatId);
+                break;
+
+            case "/help":
+                String helpMessage = """
+                        ℹ️ *How to use this bot:*
+                        
+                        1️⃣ Send me a song name
+                        2️⃣ I'll search YouTube for it
+                        3️⃣ Download and send you the MP3
+                        4️⃣ Click "Show Lyrics" button for lyrics
+                        
+                        *Commands:*
+                        /start - Start the bot
+                        /help - Show this help message
+                        /about - About this bot
+                        
+                        Just send a song name to get started! 🎵
+                        """;
+                telegramService.sendMessage(chatId, helpMessage);
+                log.info("✅ Sent help message to chatId: {}", chatId);
+                break;
+
+            case "/about":
+                String aboutMessage = """
+                        ℹ️ *About Music Download Bot*
+                        
+                        This bot helps you download music from YouTube as MP3 files.
+                        
+                        *Features:*
+                        🎵 High-quality MP3 downloads
+                        📖 Lyrics support
+                        🖼️ Thumbnail preview
+                        ⚡ Fast delivery via Cloudinary CDN
+                        
+                        Made with ❤️
+                        """;
+                telegramService.sendMessage(chatId, aboutMessage);
+                log.info("✅ Sent about message to chatId: {}", chatId);
+                break;
+
+            default:
+                telegramService.sendMessage(chatId, "❓ Unknown command. Use /help to see available commands.");
+                log.info("⚠️ Unknown command: {} from chatId: {}", command, chatId);
+                break;
+        }
+    }
     @Async("taskExecutor")
     public void processDownloadAsync(Long chatId, String songName, String messageKey) {
         try {
