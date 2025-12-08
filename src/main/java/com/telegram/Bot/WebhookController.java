@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.web.bind.annotation.*;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
@@ -15,6 +16,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
+@EnableAsync
 public class WebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
@@ -95,7 +97,7 @@ public class WebhookController {
         if (update.getMessage() != null && update.getMessage().hasText()) {
 
             Long chatId = update.getMessage().getChatId();
-            String songName = update.getMessage().getText();
+            String messageText = update.getMessage().getText();
             Integer messageDate = update.getMessage().getDate();
 
             // ✅ FILTER OLD MESSAGES
@@ -103,22 +105,30 @@ public class WebhookController {
             long messageAge = currentTime - messageDate;
 
             if (messageAge > MESSAGE_TIMEOUT_SECONDS) {
-                log.warn("⏭️ Ignoring old message ({}s old): {}", messageAge, songName);
+                log.warn("⏭️ Ignoring old message ({}s old): {}", messageAge, messageText);
                 return ResponseEntity.ok("OK");
             }
 
-            log.info("🎵 Song requested: {} (message age: {}s)", songName, messageAge);
+            // ============================
+            // 🔥 HANDLE BOT COMMANDS
+            // ============================
+            if (messageText.startsWith("/")) {
+                handleCommand(chatId, messageText);
+                return ResponseEntity.ok("OK");
+            }
+
+            log.info("🎵 Song requested: {} (message age: {}s)", messageText, messageAge);
 
             // 🔒 PREVENT DUPLICATE PROCESSING
             String messageKey = chatId + ":" + messageDate;
 
             if (!processingMessages.add(messageKey)) {
-                log.warn("🔄 Duplicate message detected, ignoring: {}", songName);
+                log.warn("🔄 Duplicate message detected, ignoring: {}", messageText);
                 return ResponseEntity.ok("OK");
             }
 
             // 🚀 PROCESS ASYNCHRONOUSLY - Don't wait for download!
-            processDownloadAsync(chatId, songName, messageKey);
+            processDownloadAsync(chatId, messageText, messageKey);
 
             // ✅ IMMEDIATELY RETURN - Don't let Telegram timeout!
             return ResponseEntity.ok("OK");
@@ -126,6 +136,7 @@ public class WebhookController {
 
         return ResponseEntity.ok("OK");
     }
+
     // ============================
     // 🤖 COMMAND HANDLER
     // ============================
@@ -195,41 +206,54 @@ public class WebhookController {
                 break;
         }
     }
+
     @Async("taskExecutor")
     public void processDownloadAsync(Long chatId, String songName, String messageKey) {
         try {
+            log.info("🚀 Starting async processing for: {}", songName);
             telegramService.sendMessage(chatId, "🔍 Searching... 🎵");
 
             // 1) Search YouTube
+            log.info("📡 Calling YouTube search for: {}", songName);
             String youtubeLink = youTubeService.searchOnYouTube(songName);
             log.info("✅ YouTube URL found: {}", youtubeLink);
 
             // 2) Send thumbnail (with error handling)
             try {
+                log.info("🖼️ Fetching thumbnail...");
                 String thumbnailUrl = thumbnailService.getThumbnailUrl(youtubeLink);
                 if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
                     telegramService.sendPhoto(chatId, thumbnailUrl);
+                    log.info("✅ Thumbnail sent");
                 }
             } catch (Exception e) {
-                log.warn("Could not send thumbnail: {}", e.getMessage());
+                log.warn("⚠️ Could not send thumbnail: {}", e.getMessage());
             }
 
             telegramService.sendMessage(chatId, "⬇️ Downloading audio... ⏳");
+            log.info("⬇️ Starting MP3 download...");
 
             // 3) Download MP3 via Python
             File mp3File = downloadService.downloadMp3(youtubeLink);
+            log.info("✅ MP3 downloaded: {} ({} bytes)", mp3File.getName(), mp3File.length());
 
             // 4) Send MP3 WITH BUTTON
+            log.info("📤 Uploading to Cloudinary...");
             telegramService.sendAudioWithButton(chatId, mp3File, songName);
 
-            log.info("✅ Successfully processed: {}", songName);
+            log.info("🎉 Successfully processed: {}", songName);
 
         } catch (Exception e) {
             log.error("❌ Error processing request for '{}': {}", songName, e.getMessage(), e);
-            telegramService.sendMessage(chatId, "❌ Error: " + e.getMessage());
+            try {
+                telegramService.sendMessage(chatId, "❌ Error: " + e.getMessage());
+            } catch (Exception msgError) {
+                log.error("❌ Could not send error message: {}", msgError.getMessage());
+            }
         } finally {
             // 🔓 Remove from processing set
             processingMessages.remove(messageKey);
+            log.info("🔓 Released message key: {}", messageKey);
         }
     }
 
