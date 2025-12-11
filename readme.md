@@ -16,7 +16,6 @@ A powerful Telegram bot that downloads music from YouTube, provides lyrics, and 
 
 - [Features](#-features)
 - [Demo](#-demo)
-- [Architecture](#-architecture)
 - [Tech Stack](#-tech-stack)
 - [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
