@@ -1,7 +1,4 @@
-```markdown
 # 🎵 BeatFetch Bot
-
-<div align="center">
 
 ![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-blue?logo=telegram)
 ![Java](https://img.shields.io/badge/Java-17+-orange?logo=openjdk)
@@ -11,9 +8,7 @@
 
 A powerful Telegram bot that downloads music from YouTube, provides lyrics, and delivers high-quality audio with embedded thumbnails.
 
-[**@BEAT_FETCH_BOT**](https://t.me/BEAT_FETCH_BOT)
-
-</div>
+**Bot:** [@BEAT_FETCH_BOT](https://t.me/BEAT_FETCH_BOT)
 
 ---
 
@@ -37,17 +32,17 @@ A powerful Telegram bot that downloads music from YouTube, provides lyrics, and 
 
 ## ✨ Features
 
-- 🎵 **Music Download**: Download songs from YouTube as high-quality MP3 (192 kbps)
-- 🔍 **Smart Search**: Automatically searches YouTube based on your query
-- 🖼️ **Thumbnail Embedding**: Embeds album art/thumbnail directly into MP3 metadata
-- 📝 **Lyrics Fetching**: Get song lyrics from Genius.com
-- ☁️ **Cloudinary Integration**: Uploads thumbnails to Cloudinary for sharing
-- ⚡ **Async Processing**: Non-blocking asynchronous operations for better performance
-- 🔒 **Secure Webhooks**: Webhook endpoint with secret token validation
-- 🐳 **Docker Ready**: Fully containerized with Docker and Docker Compose
-- 🍪 **Cookie Support**: Handles YouTube authentication for restricted content
-- ⏱️ **Timeout Management**: Prevents duplicate requests and handles message timeouts
-- 🛡️ **Error Handling**: Robust error handling with multiple retry mechanisms
+- 🎵 **Music Download** – Download songs from YouTube as high-quality MP3 (192 kbps)
+- 🔍 **Smart Search** – Auto YouTube search for song queries
+- 🖼️ **Thumbnail Embedding** – Embeds artwork into MP3 metadata
+- 📝 **Lyrics Fetching** – Gets lyrics using Genius API
+- ☁️ **Cloudinary Integration** – Uploads thumbnails for sharing
+- ⚡ **Async Processing** – Smooth background operations
+- 🔒 **Secure Webhooks** – Webhook secret validation
+- 🐳 **Docker Ready** – Easily deployable container setup
+- 🍪 **Cookie Support** – Handles YouTube restricted content
+- ⏱️ **Timeout Handling** – Prevents duplicate or long-running tasks
+- 🛡️ **Error Handling** – Automatic retries and fallback logic
 
 ---
 
@@ -55,105 +50,56 @@ A powerful Telegram bot that downloads music from YouTube, provides lyrics, and 
 
 ### Scan QR Code to Try the Bot
 
-<div align="center">
-
 ![Bot QR Code](qr-code.jpg)
 
-**Telegram Bot**: [@BEAT_FETCH_BOT](https://t.me/BEAT_FETCH_BOT)
-
-</div>
+**Telegram:** [@BEAT_FETCH_BOT](https://t.me/BEAT_FETCH_BOT)
 
 ### How to Use
 
 1. Start the bot with `/start`
-2. Send a song name or YouTube URL
-3. Receive your downloaded MP3 with embedded artwork
-4. Use `/lyrics <song name>` to get lyrics
-5. Use `/thumbnail <YouTube URL>` to get thumbnail image
+2. Send a song name or YouTube link
+3. Receive MP3 with embedded artwork
+4. Use `/lyrics <song>` for lyrics
+5. Use `/thumbnail <url>` for the video thumbnail
 
 ---
-
-## 🏗️ Architecture
-
-```
-┌─────────────┐
-│   Telegram  │
-│    User     │
-└──────┬──────┘
-       │ Message
-       ▼
-┌─────────────────────────────────────┐
-│     Telegram Bot API (Webhook)      │
-└──────┬──────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────┐
-│   Spring Boot Application           │
-│  ┌─────────────────────────────┐   │
-│  │  WebhookController          │   │
-│  └────────┬────────────────────┘   │
-│           │                         │
-│  ┌────────▼────────┐  ┌──────────┐ │
-│  │ YouTubeService  │  │ Telegram │ │
-│  │   (Search)      │  │ Service  │ │
-│  └────────┬────────┘  └──────────┘ │
-│           │                         │
-│  ┌────────▼────────┐  ┌──────────┐ │
-│  │DownloadService  │  │ Lyrics   │ │
-│  │   (yt-dlp)      │  │ Service  │ │
-│  └────────┬────────┘  └──────────┘ │
-│           │                         │
-│  ┌────────▼────────┐  ┌──────────┐ │
-│  │ThumbnailService │  │Cloudinary│ │
-│  └─────────────────┘  └──────────┘ │
-└─────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────┐
-│   Python Layer  │
-│   download.py   │
-│   (yt-dlp)      │
-└─────────────────┘
-```
-
 ---
 
 ## 🛠️ Tech Stack
 
 ### Backend
-- **Java 17+** - Core programming language
-- **Spring Boot 3.3.5** - Application framework
-- **Spring Web** - REST API & Webhook handling
-- **Spring Async** - Asynchronous processing
+- Java 17+
+- Spring Boot 3.3.5
+- Spring Web
+- Spring Async
 
 ### Python Layer
-- **Python 3.x** - Script execution
-- **yt-dlp** - YouTube video/audio downloading
-- **Mutagen** - MP3 metadata manipulation
-- **FFmpeg** - Audio conversion
+- Python 3.x
+- yt-dlp
+- Mutagen
+- FFmpeg
 
 ### External Services
-- **Telegram Bot API** - Bot interface
-- **Genius API** - Lyrics fetching
-- **Cloudinary** - Image hosting
+- Telegram Bot API
+- Genius API
+- Cloudinary
 
 ### DevOps
-- **Docker** - Containerization
-- **Docker Compose** - Multi-container orchestration
-- **Maven** - Build automation
+- Docker
+- Docker Compose
+- Maven
 
 ---
 
 ## 📦 Prerequisites
 
-### Local Development
-- Java 17 or higher
+### Local
+- Java 17+
 - Maven 3.9+
 - Python 3.x
 - FFmpeg
-- Node.js 18+ (for some dependencies)
 
-### Docker Deployment (Recommended)
+### Docker
 - Docker
 - Docker Compose
 
@@ -163,11 +109,13 @@ A powerful Telegram bot that downloads music from YouTube, provides lyrics, and 
 
 ### Option 1: Local Development
 
-1. **Clone the repository**
+1. Clone the repository:
+
 ```bash
 git clone https://github.com/konduskarsuyash/BitFetch.git
 cd BitFetch
-```
+yaml
+
 
 2. **Install Python dependencies**
 ```bash
